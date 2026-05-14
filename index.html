@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipe Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- CoolProp JS (선택적 — coolprop.js + coolprop.wasm이 같은 폴더에 있을 때만 로드됨) -->
+<script>
+// coolprop.js 존재 여부를 HEAD 요청으로 확인
+window.COOLPROP_READY = false;
+window.COOLPROP_LOADING = false;
+</script>
+<style>
+:root {
+  --bg:      #0d1117;
+  --bg2:     #161b22;
+  --bg3:     #21262d;
+  --border:  #30363d;
+  --border2: #484f58;
+  --text:    #e6edf3;
+  --text2:   #8b949e;
+  --text3:   #6e7681;
+  --accent:  #58a6ff;
+  --accent2: #388bfd;
+  --green:   #3fb950;
+  --green2:  #238636;
+  --red:     #f85149;
+  --yellow:  #d29922;
+  --purple:  #bc8cff;
+  --mono:    'IBM Plex Mono', monospace;
+  --sans:    'IBM Plex Sans KR', sans-serif;
+  --hdr:     88px;   /* header + mode bar */
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 헤더 ── */
+header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.hdr-top {
+  height: 44px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hdr-icon {
+  width: 28px; height: 28px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.hdr-title { font-size: 14px; font-weight: 600; }
+.hdr-sub   { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-top: 1px; }
+.hdr-badge {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 10px; color: var(--text3);
+  background: var(--bg3); border: 1px solid var(--border);
+  padding: 2px 8px; border-radius: 4px;
+}
+
+/* ── 모드 바 ── */
+.mode-bar {
+  height: 44px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 8px;
+}
+.mode-label {
+  font-size: 11px; color: var(--text3); font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; margin-right: 4px;
+}
+.mode-toggle {
+  display: flex;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mode-btn {
+  padding: 6px 20px;
+  border: none; background: none;
+  font-family: var(--sans); font-size: 12px; font-weight: 500;
+  color: var(--text2); cursor: pointer;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.mode-btn:hover { color: var(--text); }
+.mode-btn.active-a {
+  background: linear-gradient(135deg, var(--accent2), #5b21b6);
+  color: #fff;
+}
+.mode-btn.active-b {
+  background: var(--green2);
+  color: #fff;
+}
+.mode-desc {
+  font-size: 11px; color: var(--text3); margin-left: 8px; font-style: italic;
+}
+
+/* ── 3분할 레이아웃 ── */
+.workspace {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.pane-left {
+  width: 400px;
+  min-width: 240px; max-width: 650px;
+  display: flex; flex-direction: column;
+  overflow: hidden; flex-shrink: 0;
+}
+.pane-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 12px 12px 6px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.pane-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg2);
+  display: flex; gap: 8px; justify-content: center;
+  flex-shrink: 0;
+}
+
+.divider-v {
+  width: 5px; background: var(--border);
+  cursor: col-resize; flex-shrink: 0;
+  transition: background .15s; z-index: 10;
+}
+.divider-v:hover, .divider-v.dragging { background: var(--accent2); }
+
+.pane-right {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden; min-width: 260px;
+}
+.pane-rt {
+  height: 50%;
+  min-height: 100px;
+  overflow-y: auto; overflow-x: hidden;
+  padding: 12px 12px 6px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.divider-h {
+  height: 5px; background: var(--border);
+  cursor: row-resize; flex-shrink: 0;
+  transition: background .15s; z-index: 10;
+}
+.divider-h:hover, .divider-h.dragging { background: var(--accent2); }
+.pane-rb {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 100px;
+}
+
+body.no-select { user-select: none; }
+
+/* ── 패널 제목 ── */
+.pane-lbl {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text3); padding: 0 2px 2px;
+  flex-shrink: 0;
+}
+
+/* ── 카드 ── */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden; flex-shrink: 0;
+}
+.card-hdr {
+  padding: 6px 11px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 600;
+  color: var(--text2);
+  letter-spacing: .05em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none;
+}
+.card-hdr .chev { margin-left: auto; font-size: 10px; color: var(--text3); transition: transform .2s; }
+.card-hdr.closed .chev { transform: rotate(-90deg); }
+.card-body { padding: 9px 11px; display: flex; flex-direction: column; gap: 7px; }
+.card-body.closed { display: none; }
+
+/* ── 폼 ── */
+.fr {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  align-items: center; gap: 6px;
+}
+.fr2 { grid-template-columns: 120px 1fr; }
+.fl  { font-size: 12px; color: var(--text2); text-align: right; white-space: nowrap; }
+
+input[type="text"], input[type="number"], select {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text);
+  font-family: var(--mono); font-size: 12px;
+  padding: 4px 6px; width: 100%; outline: none;
+  transition: border-color .15s;
+}
+input:focus, select:focus { border-color: var(--accent); }
+select { cursor: pointer; }
+select option { background: var(--bg2); }
+
+.rg { display: flex; gap: 8px; flex-wrap: wrap; }
+.rl {
+  display: flex; align-items: center; gap: 4px;
+  cursor: pointer; font-size: 12px; color: var(--text2);
+}
+.rl input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
+.rl:hover { color: var(--text); }
+
+.ival {
+  font-family: var(--mono); font-size: 12px; color: var(--accent);
+  padding: 3px 6px;
+  background: rgba(88,166,255,.07);
+  border-radius: 4px; border: 1px solid rgba(88,166,255,.15);
+}
+
+.hidden { display: none !important; }
+hr { border: none; border-top: 1px solid var(--border); margin: 1px 0; }
+
+/* ── 버튼 ── */
+.btn {
+  padding: 5px 12px; border-radius: 6px; border: none;
+  cursor: pointer; font-family: var(--sans); font-size: 12px; font-weight: 500;
+  transition: opacity .15s, transform .1s; white-space: nowrap;
+}
+.btn:active { transform: scale(.97); }
+.btn-pri  { background: var(--accent2); color: #fff; }
+.btn-pri:hover { background: var(--accent); }
+.btn-del  { background: #b91c1c; color: #fff; font-size: 11px; padding: 3px 8px; }
+.btn-del:hover { background: var(--red); }
+.btn-gho  { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
+.btn-gho:hover { color: var(--text); border-color: var(--border2); }
+.btn-pur  { background: #5b21b6; color: #fff; font-size: 11px; padding: 3px 8px; }
+.btn-pur:hover { background: var(--purple); color: #000; }
+
+.btn-calc-a {
+  background: linear-gradient(135deg, var(--accent2), #5b21b6);
+  color: #fff; font-size: 13px; font-weight: 600;
+  padding: 7px 24px; border-radius: 7px; border: none; cursor: pointer;
+  box-shadow: 0 2px 12px rgba(88,166,255,.25);
+  transition: opacity .15s, transform .1s;
+}
+.btn-calc-a:hover { opacity: .9; }
+.btn-calc-a:active { transform: scale(.97); }
+
+.btn-calc-b {
+  background: var(--green2);
+  color: #fff; font-size: 13px; font-weight: 600;
+  padding: 7px 24px; border-radius: 7px; border: none; cursor: pointer;
+  box-shadow: 0 2px 10px rgba(63,185,80,.2);
+  transition: opacity .15s, transform .1s;
+}
+.btn-calc-b:hover { opacity: .9; }
+.btn-calc-b:active { transform: scale(.97); }
+
+/* ── Fitting 테이블 ── */
+.fit-wrap { overflow-x: auto; max-height: 160px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th {
+  background: var(--bg3); color: var(--text3);
+  font-weight: 500; padding: 4px 6px;
+  text-align: left; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+}
+tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+tbody tr:hover { background: var(--bg3); }
+tbody td { padding: 4px 6px; font-family: var(--mono); color: var(--text2); }
+tbody td:first-child { color: var(--text); font-family: var(--sans); }
+.k-total-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 0; }
+.k-total-val { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--green); }
+
+/* ── 에러 ── */
+.err-box {
+  background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.4);
+  border-radius: 6px; padding: 8px 11px;
+  color: var(--red); font-size: 12px; display: none;
+}
+.err-box.show { display: block; }
+
+/* ── Placeholder ── */
+.placeholder {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px; padding: 30px 20px;
+  color: var(--text3); font-size: 12px;
+}
+.placeholder svg { opacity: .2; }
+
+/* ── 결과 카드 ── */
+.rg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.rc {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px;
+}
+.rc.full    { grid-column: 1/-1; }
+.rc.acc     { border-color: var(--accent); background: rgba(88,166,255,.06); }
+.rc.grn     { border-color: var(--green);  background: rgba(63,185,80,.06); }
+.rc.pur     { border-color: #7c3aed; background: rgba(124,58,237,.07); }
+.rc.step    { border-color: var(--border2); }
+
+.rl2  { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+.rv   { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--text); }
+.rv.big { font-size: 19px; }
+.ru   { font-size: 10px; color: var(--text3); margin-left: 3px; font-family: var(--mono); }
+
+.regime-l { color: var(--green)  !important; }
+.regime-t { color: var(--red)    !important; }
+.regime-tr{ color: var(--yellow) !important; }
+
+.dp-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.dp-val { font-family: var(--mono); font-size: 19px; font-weight: 600; min-width: 90px; }
+.dp-sel {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text2); font-family: var(--mono); font-size: 12px;
+  padding: 3px 5px; width: auto; cursor: pointer;
+}
+.dp-sub { font-size: 10px; color: var(--text3); margin-top: 4px; font-family: var(--mono); }
+
+.bdr { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.bdr:last-child { border-bottom: none; }
+.bdl { color: var(--text2); }
+.bdv { font-family: var(--mono); color: var(--text); }
+
+/* ── 단계 배지 ── */
+.step-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  font-size: 11px; font-weight: 700; margin-right: 4px; flex-shrink: 0;
+}
+.step-a { background: var(--accent2); color: #fff; }
+.step-b { background: var(--green2); color: #fff; }
+
+/* ── NPS 선택 안내 ── */
+.nps-hint {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: rgba(88,166,255,.06);
+  border: 1px solid rgba(88,166,255,.2);
+  border-radius: 6px;
+  font-size: 12px; color: var(--accent);
+}
+
+/* ── 스크롤바 ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ══ 헤더 ══ -->
+<header>
+  <div class="hdr-top">
+    <div class="hdr-icon">🔧</div>
+    <div>
+      <div class="hdr-title">Pipe Pressure Drop Calculator</div>
+      <div class="hdr-sub">Darcy-Weisbach · Colebrook-White (N-R) · Economic Diameter · Barlow</div>
+    </div>
+    <div class="hdr-badge">v3.0</div>
+  </div>
+  <div class="mode-bar">
+    <span class="mode-label">Mode</span>
+    <div class="mode-toggle">
+      <button class="mode-btn active-a" id="btn_modeA" onclick="setMode('A')">
+        ⚙ Design Mode — D 최적화 → ΔP → Barlow
+      </button>
+      <button class="mode-btn" id="btn_modeB" onclick="setMode('B')">
+        ✓ Check Mode — 기존 D 검증
+      </button>
+    </div>
+    <span class="mode-desc" id="mode_desc">유량·경제 파라미터 → D_opt → NPS 선택 → ΔP → Barlow</span>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <!-- ══ 좌측 패널 ══ -->
+  <div class="pane-left" id="paneLeft">
+    <div class="pane-scroll" id="leftScroll">
+      <div class="pane-lbl" id="left_lbl">Input — Fluid / Flow / Pipe Conditions</div>
+
+      <!-- 유체 -->
+      <div class="card">
+        <div class="card-hdr" onclick="toggleCard(this)">⬡ Fluid <span class="chev">▾</span></div>
+        <div class="card-body">
+          <div class="rg">
+            <label class="rl"><input type="radio" name="fluid_mode" value="db_fixed" checked onchange="onFluidMode()"> Database</label>
+            <label class="rl" id="lbl_mode_temp"><input type="radio" name="fluid_mode" value="db_temp" id="radio_db_temp" onchange="onFluidMode()"> Database + Temp <span id="temp_lock_icon" style="font-size:10px;color:var(--red)">🔒</span></label>
+            <label class="rl"><input type="radio" name="fluid_mode" value="manual" onchange="onFluidMode()"> Manual</label>
+          </div>
+
+          <!-- DB fixed 모드 -->
+          <div id="fluid_db_fixed">
+            <div class="fr fr2"><span class="fl">Fluid :</span><select id="cb_fluid_fixed" onchange="onFluidChangeFixed()"></select></div>
+            <div class="fr fr2"><span class="fl">Density :</span><span class="ival" id="lbl_rho_fixed">—</span></div>
+            <div class="fr fr2"><span class="fl">Viscosity :</span><span class="ival" id="lbl_mu_fixed">—</span></div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">상온(20~25°C) 기준 고정값</div>
+          </div>
+
+          <!-- DB temp 모드 -->
+          <div id="fluid_db_temp" class="hidden">
+            <div class="fr fr2"><span class="fl">Fluid :</span><select id="cb_fluid_temp" onchange="onFluidChangeTemp()"></select></div>
+            <div class="fr" id="temp_row">
+              <span class="fl">Temperature :</span>
+              <input type="number" id="le_temp" value="25" step="1" onchange="onFluidChangeTemp()">
+              <select id="cb_temp_unit" onchange="onFluidChangeTemp()">
+                <option value="C">°C</option>
+                <option value="K">K</option>
+                <option value="F">°F</option>
+              </select>
+            </div>
+            <div class="fr fr2"><span class="fl">Density :</span><span class="ival" id="lbl_rho_temp">—</span></div>
+            <div class="fr fr2"><span class="fl">Viscosity :</span><span class="ival" id="lbl_mu_temp">—</span></div>
+            <div id="temp_status" style="font-size:10px;margin-top:2px;padding:3px 8px;border-radius:4px;display:none"></div>
+            <div id="lbl_temp_warn" style="font-size:10px;color:var(--yellow);margin-top:2px;display:none"></div>
+          </div>
+
+          <!-- Manual 모드 -->
+          <div id="fluid_manual" class="hidden">
+            <div class="fr"><span class="fl">Density :</span><input type="number" id="le_rho" value="1000" min="0" step="any"><select id="cb_rho_unit"></select></div>
+            <div class="fr"><span class="fl">Viscosity :</span><input type="number" id="le_mu" value="8.9e-4" min="0" step="any"><select id="cb_mu_unit"></select></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 유량 -->
+      <div class="card">
+        <div class="card-hdr" onclick="toggleCard(this)">→ Flow Rate <span class="chev">▾</span></div>
+        <div class="card-body">
+          <div class="rg">
+            <label class="rl"><input type="radio" name="flow_type" value="vol" checked onchange="onFlowType()"> 체적유량 Q</label>
+            <label class="rl"><input type="radio" name="flow_type" value="mass" onchange="onFlowType()"> 질량유량 ṁ</label>
+          </div>
+          <div id="flow_vol">
+            <div class="fr"><span class="fl">Q :</span><input type="number" id="le_Q" value="10" min="0" step="any"><select id="cb_Q_unit"></select></div>
+          </div>
+          <div id="flow_mass" class="hidden">
+            <div class="fr"><span class="fl">ṁ :</span><input type="number" id="le_mdot" value="10" min="0" step="any"><select id="cb_mdot_unit"></select></div>
+          </div>
+          <div style="font-size:11px;color:var(--text3)" id="lbl_flow_equiv">—</div>
+        </div>
+      </div>
+
+      <!-- 파이프 (Check Mode 전용) -->
+      <div class="card" id="card_pipe">
+        <div class="card-hdr" onclick="toggleCard(this)">◫ Pipe <span class="chev">▾</span></div>
+        <div class="card-body">
+          <div class="rg">
+            <label class="rl"><input type="radio" name="pipe_mode" value="nps" checked onchange="onPipeMode()"> NPS Database</label>
+            <label class="rl"><input type="radio" name="pipe_mode" value="manual" onchange="onPipeMode()"> Manual</label>
+          </div>
+          <div id="pipe_nps">
+            <div class="fr"><span class="fl">NPS Size :</span><select id="cb_nps" onchange="onNpsChange()"></select><span></span></div>
+            <div class="fr"><span class="fl">Schedule :</span><select id="cb_sched" onchange="onSchedChange()"></select><span></span></div>
+            <div class="fr fr2"><span class="fl">OD :</span><span class="ival" id="lbl_od">—</span></div>
+            <div class="fr fr2"><span class="fl">ID :</span><span class="ival" id="lbl_id">—</span></div>
+          </div>
+          <div id="pipe_manual" class="hidden">
+            <div class="fr"><span class="fl">Inner Diameter :</span><input type="number" id="le_di" value="102.26" min="0" step="any"><select id="cb_di_unit"></select></div>
+          </div>
+          <hr>
+          <!-- 조도 -->
+          <div class="fr" style="grid-template-columns:120px auto auto auto">
+            <span class="fl">Roughness :</span>
+            <label class="rl"><input type="radio" name="rough_mode" value="smooth" checked onchange="onRoughMode()"> Smooth</label>
+            <label class="rl"><input type="radio" name="rough_mode" value="db" onchange="onRoughMode()"> DB</label>
+            <label class="rl"><input type="radio" name="rough_mode" value="manual" onchange="onRoughMode()"> Manual</label>
+          </div>
+          <div id="rough_db" class="hidden">
+            <div class="fr fr2"><span class="fl">Material :</span><select id="cb_rough" onchange="onRoughChange()"></select></div>
+            <div class="fr fr2"><span class="fl">ε (repr.) :</span><span class="ival" id="lbl_rough">—</span></div>
+          </div>
+          <div id="rough_manual" class="hidden">
+            <div class="fr"><span class="fl">ε :</span><input type="number" id="le_rough" value="0.046" min="0" step="any"><select id="cb_rough_unit"></select></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 파이프 조건 (공통) -->
+      <div class="card">
+        <div class="card-hdr" onclick="toggleCard(this)">⌀ Pipe Conditions <span class="chev">▾</span></div>
+        <div class="card-body">
+          <div class="fr"><span class="fl">Length L :</span><input type="number" id="le_L" value="100" min="0" step="any"><select id="cb_L_unit"></select></div>
+          <div class="fr"><span class="fl">Height Δz :</span><input type="number" id="le_dz" value="0" step="any"><select id="cb_dz_unit"></select></div>
+          <div style="font-size:11px;color:var(--text3)">Δz &gt; 0 : 출구가 더 높음 (uphill)</div>
+        </div>
+      </div>
+
+    </div><!-- pane-scroll -->
+
+    <div class="pane-footer">
+      <button class="btn-calc-a hidden" id="btn_calc_a" onclick="calcDesign()">⚡ Calculate D_opt</button>
+      <button class="btn-calc-b hidden" id="btn_calc_b" onclick="calcCheck()">⚡ Calculate ΔP</button>
+      <button class="btn btn-gho" onclick="resetAll()">↺ Reset</button>
+    </div>
+  </div><!-- pane-left -->
+
+  <div class="divider-v" id="divV"></div>
+
+  <!-- ══ 우측 ══ -->
+  <div class="pane-right" id="paneRight">
+
+    <!-- 우상단 -->
+    <div class="pane-rt" id="paneRT">
+      <div class="pane-lbl" id="rt_lbl">Input — Fittings / Safety</div>
+
+      <!-- Fitting -->
+      <div class="card">
+        <div class="card-hdr" onclick="toggleCard(this)">⊕ Minor Loss — Fittings <span class="chev">▾</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:5px;align-items:center">
+            <select id="cb_cat" onchange="onCatChange()" style="font-size:12px"></select>
+            <input type="number" id="sb_qty" value="1" min="1" max="99" style="width:46px;text-align:center">
+            <button class="btn btn-pri" style="font-size:11px;padding:3px 9px" onclick="addFittingDB()">+ Add</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:5px;align-items:center">
+            <select id="cb_fitting" onchange="onFittingChange()" style="font-size:12px"></select>
+            <span class="ival" id="lbl_k_hint" style="width:70px;text-align:center;font-size:11px">K = —</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3)" id="lbl_note_hint"></div>
+          <hr>
+          <div style="display:grid;grid-template-columns:auto 1fr 1fr auto;gap:5px;align-items:center">
+            <span style="font-size:12px;color:var(--text2);white-space:nowrap">K 직접:</span>
+            <input type="number" id="le_k_val" placeholder="K value" min="0" step="any" style="font-size:12px">
+            <input type="text" id="le_k_name" placeholder="설명 (선택)" style="font-size:12px">
+            <button class="btn btn-pur" onclick="addFittingK()">+ Add K</button>
+          </div>
+          <div class="fit-wrap">
+            <table><thead><tr><th>Fitting</th><th>K</th><th>Qty</th><th>K×Qty</th><th></th></tr></thead>
+            <tbody id="fit_tbody"></tbody></table>
+          </div>
+          <div class="k-total-row">
+            <span class="k-total-val" id="k_total">∑K = 0.0000</span>
+            <button class="btn btn-del" onclick="clearFittings()">전체 삭제</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 경제 파라미터 (Design Mode 전용) -->
+      <div class="card" id="card_econ">
+        <div class="card-hdr" onclick="toggleCard(this)">💰 Economic Parameters <span class="chev">▾</span></div>
+        <div class="card-body">
+          <div style="font-size:11px;color:var(--text3);line-height:1.7;margin-bottom:2px">
+            D<sub>opt</sub> = [ 40f·ṁ³·C₂·t / ( n(a+b)(1+F)·C₁·η·π²·ρ² ) ]<sup>1/(n+5)</sup>
+          </div>
+          <div class="fr"><span class="fl">C₂ (전력단가) :</span><input type="number" id="c2" value="0.13" min="0" step="any"><select id="c2_unit" style="width:95px"><option value="1">$/kWh</option><option value="1380">₩/kWh</option></select></div>
+          <div style="font-size:10px;color:var(--text3);margin:-4px 0 4px 126px">KEPCO 산업용 2024 ($0.13/kWh) — 기계단위계 공식, $/kWh 그대로 적용</div>
+          <div class="fr"><span class="fl">C₁ (배관단가) :</span><input type="number" id="c1" value="484.6" min="0" step="any"><span style="font-size:11px;color:var(--text2);white-space:nowrap">$/m<sup>n+1</sup></span></div>
+          <div style="font-size:10px;color:var(--text3);margin:-4px 0 3px 126px">나비엠알오 SCH40 흑관 실측 (2025.05, R²=0.981)</div>
+          <div class="fr"><span class="fl">n (배관지수) :</span><input type="number" id="econ_n" value="1.08" min="0.5" max="2" step="0.01"><span style="font-size:11px;color:var(--text2)">전형: 1.0~1.4</span></div>
+          <div class="fr"><span class="fl">F (설치계수) :</span><input type="number" id="econ_F" value="7" min="0" step="0.1"><span style="font-size:11px;color:var(--text2)">전형: 6~7</span></div>
+          <div class="fr"><span class="fl">η (펌프효율) :</span><input type="number" id="econ_eta" value="0.7" min="0.1" max="1" step="0.01"><span style="font-size:11px;color:var(--text2)">전형: 0.6~0.9</span></div>
+          <hr>
+          <div class="fr"><span class="fl">a (감가상각) :</span><input type="number" id="econ_a" value="0.1" min="0" step="0.01"><span style="font-size:11px;color:var(--text2)">1/yr</span></div>
+          <div class="fr"><span class="fl">b (유지보수) :</span><input type="number" id="econ_b" value="0.01" min="0" step="0.001"><span style="font-size:11px;color:var(--text2)">1/yr</span></div>
+          <div class="fr"><span class="fl">t (운전시간) :</span><input type="number" id="econ_t" value="8000" min="0" step="100"><span style="font-size:11px;color:var(--text2)">hr/yr</span></div>
+        </div>
+      </div>
+
+      <!-- Barlow 입력 -->
+      <div class="card">
+        <div class="card-hdr" onclick="toggleCard(this)">🛡 Safety — Barlow <span class="chev">▾</span></div>
+        <div class="card-body">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:3px">
+            P<sub>max</sub> = 2·S·t / OD &nbsp;≥&nbsp; P<sub>op</sub> : ✅ Safe
+          </div>
+          <div class="fr fr2"><span class="fl">재질 :</span>
+            <select id="material" onchange="onMaterialChange()">
+              <option value="138">Carbon Steel A106 Gr.B  (S=138 MPa)</option>
+              <option value="138">Stainless Steel 304/316  (S=138 MPa)</option>
+              <option value="13.8">PVC Schedule 40  (S=13.8 MPa)</option>
+              <option value="17.2">CPVC  (S=17.2 MPa)</option>
+              <option value="custom">Custom...</option>
+            </select>
+          </div>
+          <div class="fr" id="custom_s_row" style="display:none">
+            <span class="fl">허용응력 S :</span>
+            <input type="number" id="custom_s" value="138" min="0" step="1">
+            <span style="font-size:11px;color:var(--text2)">MPa</span>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">
+            ※ P<sub>op</sub> = 계산된 ΔP Total 자동 적용
+          </div>
+        </div>
+      </div>
+
+    </div><!-- pane-rt -->
+
+    <div class="divider-h" id="divH"></div>
+
+    <!-- 우하단 — 결과 -->
+    <div class="pane-rb" id="paneRB">
+      <div class="pane-lbl">Results</div>
+      <div class="err-box" id="err_box"></div>
+
+      <!-- Design Mode 결과 -->
+      <div id="res_design" class="hidden">
+
+        <!-- Step 1: D_opt -->
+        <div class="rc pur full" style="margin-bottom:7px">
+          <div style="display:flex;align-items:center;margin-bottom:4px">
+            <span class="step-badge step-a">1</span>
+            <span class="rl2" style="margin:0">Optimal Diameter  D<sub>opt</sub></span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span class="rv big" id="r_dopt">—</span><span class="ru">m</span>
+            <span style="font-size:13px;color:var(--text2)" id="r_dopt_mm">—</span>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">
+            수렴 <span id="r_iters">—</span>회 &nbsp;|&nbsp;
+            f = <span id="r_f_opt">—</span> &nbsp;|&nbsp;
+            Re = <span id="r_re_opt">—</span> &nbsp;|&nbsp;
+            <span id="r_reg_opt">—</span>
+          </div>
+        </div>
+
+        <!-- Step 2: NPS 후보 -->
+        <div class="card" style="margin-bottom:7px">
+          <div class="card-hdr" style="cursor:default">
+            <span class="step-badge step-a">2</span>
+            NPS Candidates
+            <span style="font-weight:400;font-size:10px;color:var(--text3);margin-left:4px">— NPS를 클릭하면 ΔP / Barlow 계산</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table style="font-size:12px">
+              <thead><tr style="background:var(--bg3)">
+                <th style="padding:5px 7px;text-align:left;color:var(--text3);font-weight:500;border-bottom:1px solid var(--border)">NPS</th>
+                <th style="padding:5px 7px;color:var(--text3);font-weight:500;border-bottom:1px solid var(--border)">Sched</th>
+                <th style="padding:5px 7px;text-align:right;color:var(--text3);font-weight:500;border-bottom:1px solid var(--border)">ID (mm)</th>
+                <th style="padding:5px 7px;text-align:right;color:var(--text3);font-weight:500;border-bottom:1px solid var(--border)">OD (mm)</th>
+                <th style="padding:5px 7px;text-align:right;color:var(--text3);font-weight:500;border-bottom:1px solid var(--border)">t (mm)</th>
+                <th style="padding:5px 7px;text-align:center;color:var(--text3);font-weight:500;border-bottom:1px solid var(--border)">추천</th>
+              </tr></thead>
+              <tbody id="nps_tbody"></tbody>
+            </table>
+          </div>
+          <div style="padding:5px 9px;font-size:10px;color:var(--text3)">★ = D<sub>opt</sub>에 가장 가까운 NPS</div>
+        </div>
+
+        <!-- Step 3+4+5: NPS 선택 후 결과 -->
+        <div id="res_after_nps" class="hidden">
+
+          <div class="nps-hint" style="margin-bottom:7px">
+            선택된 NPS: <strong id="r_selected_nps">—</strong>
+            &nbsp;|&nbsp; ID = <strong id="r_selected_id">—</strong> mm
+          </div>
+
+          <!-- Flow -->
+          <div class="rg2" style="margin-bottom:7px">
+            <div class="rc">
+              <div class="rl2">Velocity</div>
+              <div><span class="rv" id="r_V">—</span><span class="ru">m/s</span></div>
+            </div>
+            <div class="rc">
+              <div class="rl2">Reynolds Number</div>
+              <div><span class="rv" id="r_Re">—</span></div>
+            </div>
+            <div class="rc">
+              <div class="rl2">Flow Regime</div>
+              <div><span class="rv" id="r_regime">—</span></div>
+            </div>
+            <div class="rc">
+              <div class="rl2">Friction Factor  f</div>
+              <div><span class="rv" id="r_f">—</span></div>
+            </div>
+          </div>
+
+          <!-- Step 3: ΔP Breakdown -->
+          <div class="rc full" style="margin-bottom:7px">
+            <div style="display:flex;align-items:center;margin-bottom:5px">
+              <span class="step-badge step-a">3</span>
+              <span class="rl2" style="margin:0">Pressure Loss Breakdown</span>
+            </div>
+            <div class="bdr"><span class="bdl">ΔP Major  (마찰)</span><span class="bdv" id="r_dp_major">—</span></div>
+            <div class="bdr"><span class="bdl">ΔP Minor  (Fittings)</span><span class="bdv" id="r_dp_minor">—</span></div>
+            <div class="bdr"><span class="bdl">ΔP Static  (위치수두)</span><span class="bdv" id="r_dp_static">—</span></div>
+          </div>
+
+          <!-- Step 4: ΔP Total + Pump -->
+          <div class="rc acc full" style="margin-bottom:7px">
+            <div style="display:flex;align-items:center;margin-bottom:3px">
+              <span class="step-badge step-a">4</span>
+              <span class="rl2" style="margin:0">ΔP Total → Pump</span>
+            </div>
+            <div class="dp-row">
+              <span class="dp-val" id="r_dp_total">—</span>
+              <select class="dp-sel" id="dp_unit" onchange="refreshDP()"></select>
+            </div>
+            <div class="dp-sub" id="r_dp_sub">—</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px">
+              <div class="rc grn" style="background:none;border-color:var(--green)">
+                <div class="rl2">Pump Head H</div>
+                <div><span class="rv" id="r_head">—</span><span class="ru">m</span></div>
+              </div>
+              <div class="rc grn" style="background:none;border-color:var(--green)">
+                <div class="rl2">Pump Power (η=100%)</div>
+                <div><span class="rv" id="r_power">—</span><span class="ru" id="r_pow_unit">W</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 5: Barlow -->
+          <div class="rc full" id="r_barlow_card" style="margin-bottom:7px">
+            <div style="display:flex;align-items:center;margin-bottom:5px">
+              <span class="step-badge step-a">5</span>
+              <span class="rl2" style="margin:0">Barlow Safety</span>
+            </div>
+            <div class="bdr"><span class="bdl">P<sub>max</sub> (Barlow)</span><span class="bdv" id="r_pmax">—</span></div>
+            <div class="bdr"><span class="bdl">P<sub>op</sub> (= ΔP Total)</span><span class="bdv" id="r_pop_used">—</span></div>
+            <div class="bdr" style="border:none">
+              <span class="bdl">안전성 판정</span>
+              <span class="bdv" id="r_safe" style="font-weight:700">—</span>
+            </div>
+          </div>
+
+        </div><!-- res_after_nps -->
+      </div><!-- res_design -->
+
+      <!-- Check Mode 결과 -->
+      <div id="res_check" class="hidden">
+
+        <!-- Flow -->
+        <div class="rg2" style="margin-bottom:7px">
+          <div class="rc">
+            <div class="rl2">Velocity</div>
+            <div><span class="rv" id="c_V">—</span><span class="ru">m/s</span></div>
+          </div>
+          <div class="rc">
+            <div class="rl2">Reynolds Number</div>
+            <div><span class="rv" id="c_Re">—</span></div>
+          </div>
+          <div class="rc">
+            <div class="rl2">Flow Regime</div>
+            <div><span class="rv" id="c_regime">—</span></div>
+          </div>
+          <div class="rc">
+            <div class="rl2">Friction Factor  f</div>
+            <div><span class="rv" id="c_f">—</span></div>
+          </div>
+          <div class="rc">
+            <div class="rl2">Relative Roughness  ε/D</div>
+            <div><span class="rv" style="font-size:13px" id="c_epsD">—</span></div>
+          </div>
+          <div class="rc">
+            <div class="rl2">Method</div>
+            <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:3px;line-height:1.4" id="c_method">—</div>
+          </div>
+        </div>
+
+        <!-- ΔP Breakdown -->
+        <div class="rc full" style="margin-bottom:7px">
+          <div class="rl2" style="margin-bottom:4px">Pressure Loss Breakdown</div>
+          <div class="bdr"><span class="bdl">ΔP Major  (마찰)</span><span class="bdv" id="c_dp_major">—</span></div>
+          <div class="bdr"><span class="bdl">ΔP Minor  (Fittings)</span><span class="bdv" id="c_dp_minor">—</span></div>
+          <div class="bdr"><span class="bdl">ΔP Static  (위치수두)</span><span class="bdv" id="c_dp_static">—</span></div>
+        </div>
+
+        <!-- ΔP Total + Pump -->
+        <div class="rc acc full" style="margin-bottom:7px">
+          <div class="rl2" style="margin-bottom:3px">ΔP Total</div>
+          <div class="dp-row">
+            <span class="dp-val" id="c_dp_total">—</span>
+            <select class="dp-sel" id="c_dp_unit" onchange="refreshDPCheck()"></select>
+          </div>
+          <div class="dp-sub" id="c_dp_sub">—</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px">
+            <div class="rc grn" style="background:none;border-color:var(--green)">
+              <div class="rl2">Pump Head H</div>
+              <div><span class="rv" id="c_head">—</span><span class="ru">m</span></div>
+            </div>
+            <div class="rc grn" style="background:none;border-color:var(--green)">
+              <div class="rl2">Pump Power (η=100%)</div>
+              <div><span class="rv" id="c_power">—</span><span class="ru" id="c_pow_unit">W</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Barlow -->
+        <div class="rc full" style="margin-bottom:7px">
+          <div class="rl2" style="margin-bottom:4px">Barlow Safety</div>
+          <div class="bdr"><span class="bdl">P<sub>max</sub> (Barlow)</span><span class="bdv" id="c_pmax">—</span></div>
+          <div class="bdr"><span class="bdl">P<sub>op</sub> (= ΔP Total)</span><span class="bdv" id="c_pop_used">—</span></div>
+          <div class="bdr" style="border:none">
+            <span class="bdl">안전성 판정</span>
+            <span class="bdv" id="c_safe" style="font-weight:700">—</span>
+          </div>
+        </div>
+
+      </div><!-- res_check -->
+
+      <!-- Placeholder -->
+      <div class="placeholder" id="placeholder">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+        <span id="placeholder_txt">입력값을 설정하고 Calculate를 누르세요</span>
+      </div>
+
+    </div><!-- pane-rb -->
+  </div><!-- pane-right -->
+</div><!-- workspace -->
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// CoolProp JS 연동 — coolprop.js + coolprop.wasm이 같은 폴더에 있을 때만 활성화
+// ════════════════════════════════════════════════════════════════════════════
+
+// CoolProp JS에서 사용하는 유체명 매핑 (null = CoolProp 미지원 → 다항식/고정값 사용)
+const CP_FLUID_MAP = {
+  "Acetone":             null,           // 점도 모델 없음
+  "Benzene":             "Benzene",
+  "Carbon Disulfide":    null,
+  "Carbon Tetrachloride":null,
+  "Castor Oil":          null,
+  "Chloroform":          null,
+  "Decane":              "Decane",
+  "Ether":               null,           // 점도 모델 없음
+  "Ethyl Alcohol":       "Ethanol",
+  "Ethylene Glycol":     null,
+  "Glycerine":           null,
+  "Heptane":             "Heptane",
+  "Hexane":              "Hexane",
+  "Kerosene":            null,
+  "Linseed Oil":         null,
+  "Mercury":             null,
+  "Methyl Alcohol":      "Methanol",
+  "Octane":              "Octane",
+  "Propane":             null,           // 상온 기체
+  "Propyl Alcohol":      null,           // CoolProp DB 미수록
+  "Propylene":           null,           // 상온 기체
+  "Propylene Glycol":    null,
+  "Turpentine":          null,
+  "Water":               "Water",
+};
+
+// CoolProp 존재 여부 감지 및 로드
+function initCoolProp() {
+  fetch('coolprop.js', { method: 'HEAD' })
+    .then(res => {
+      if (!res.ok) throw new Error('not found');
+      // 존재함 → 동적으로 script 로드
+      return loadCoolPropScript();
+    })
+    .then(() => {
+      window.COOLPROP_READY = true;
+      setTempUI('active');
+      onFluidChange(); // 값 갱신
+    })
+    .catch(() => {
+      window.COOLPROP_READY = false;
+      setTempUI('locked');
+    });
+}
+
+function loadCoolPropScript() {
+  return new Promise((resolve, reject) => {
+    setTempUI('loading');
+    // coolprop.js가 ES Module 형식이므로 동적 import() 사용
+    import('./coolprop.js')
+      .then(module => {
+        // Emscripten 모듈 초기화 대기
+        const mod = module.default || module;
+        if (typeof mod === 'function') {
+          // Emscripten factory function
+          mod().then(instance => {
+            window.Module = instance;
+            resolve();
+          }).catch(reject);
+        } else if (mod && typeof mod.PropsSI === 'function') {
+          window.Module = mod;
+          resolve();
+        } else {
+          // Module이 전역에 올라올 때까지 대기
+          const wait = setInterval(() => {
+            if (window.Module && typeof window.Module.PropsSI === 'function') {
+              clearInterval(wait); resolve();
+            }
+          }, 100);
+          setTimeout(() => { clearInterval(wait); reject(new Error('timeout')); }, 15000);
+        }
+      })
+      .catch(reject);
+  });
+}
+
+function setTempUI(state) {
+  const status  = document.getElementById('temp_status');
+  const lockIcon= document.getElementById('temp_lock_icon');
+  const radio   = document.getElementById('radio_db_temp');
+  const modeLabel = document.getElementById('lbl_mode_temp');
+
+  if (state === 'locked') {
+    if (radio) radio.disabled = true;
+    if (modeLabel) modeLabel.style.opacity = '0.45';
+    if (lockIcon) { lockIcon.textContent = '🔒'; lockIcon.style.color = 'var(--red)'; }
+    if (status) { status.style.display = 'none'; }
+  } else if (state === 'loading') {
+    if (radio) radio.disabled = true;
+    if (modeLabel) modeLabel.style.opacity = '0.6';
+    if (lockIcon) { lockIcon.textContent = '⏳'; lockIcon.style.color = 'var(--yellow)'; }
+    if (status) {
+      status.style.display = 'block';
+      status.style.background = 'rgba(210,153,34,.1)';
+      status.style.color = 'var(--yellow)';
+      status.textContent = '⏳ CoolProp 로딩 중...';
+    }
+  } else if (state === 'active') {
+    if (radio) radio.disabled = false;
+    if (modeLabel) modeLabel.style.opacity = '1';
+    if (lockIcon) { lockIcon.textContent = '✅'; lockIcon.style.color = 'var(--green)'; }
+    if (status) {
+      status.style.display = 'block';
+      status.style.background = 'rgba(63,185,80,.08)';
+      status.style.color = 'var(--green)';
+      status.textContent = '✅ CoolProp 연결됨 — 정확한 온도별 물성 사용 중';
+    }
+  }
+}
+
+// CoolProp JS로 ρ, μ 계산 (Promise 반환)
+function getCoolPropProps(fluidName, T_C, P_Pa = 101325) {
+  const cp = CP_FLUID_MAP[fluidName];
+  if (!cp || !window.COOLPROP_READY || typeof window.Module?.PropsSI !== 'function') {
+    return null; // fallback to poly/fixed
+  }
+  try {
+    const T_K = T_C + 273.15;
+    const rho = window.Module.PropsSI('D', 'T', T_K, 'P', P_Pa, cp);
+    const mu  = window.Module.PropsSI('V', 'T', T_K, 'P', P_Pa, cp);
+    if (!isFinite(rho) || !isFinite(mu) || rho <= 0 || mu <= 0) return null;
+    return { rho, mu, source: 'CoolProp' };
+  } catch(e) {
+    return null;
+  }
+}
+
+
+// 상온(20~25°C) 기준 고정값 DB — CoolProp 없이도 항상 사용 가능
+const FLUID_DB_FIXED = {
+  "Acetone":             { rho:787.0,   mu:0.316e-3 },
+  "Benzene":             { rho:876.0,   mu:0.601e-3 },
+  "Carbon Disulfide":    { rho:1265.0,  mu:0.36e-3  },
+  "Carbon Tetrachloride":{ rho:1590.0,  mu:0.91e-3  },
+  "Castor Oil":          { rho:960.0,   mu:650e-3   },
+  "Chloroform":          { rho:1470.0,  mu:0.53e-3  },
+  "Decane":              { rho:728.0,   mu:0.859e-3 },
+  "Ether":               { rho:715.0,   mu:0.223e-3 },
+  "Ethyl Alcohol":       { rho:787.0,   mu:1.095e-3 },
+  "Ethylene Glycol":     { rho:1100.0,  mu:16.2e-3  },
+  "Glycerine":           { rho:1263.0,  mu:950e-3   },
+  "Heptane":             { rho:681.0,   mu:0.376e-3 },
+  "Hexane":              { rho:657.0,   mu:0.297e-3 },
+  "Kerosene":            { rho:823.0,   mu:1.64e-3  },
+  "Linseed Oil":         { rho:930.0,   mu:33.1e-3  },
+  "Mercury":             { rho:13600.0, mu:1.53e-3  },
+  "Methyl Alcohol":      { rho:789.0,   mu:0.56e-3  },
+  "Octane":              { rho:701.0,   mu:0.51e-3  },
+  "Propane":             { rho:495.0,   mu:0.11e-3  },
+  "Propyl Alcohol":      { rho:802.0,   mu:1.92e-3  },
+  "Propylene":           { rho:516.0,   mu:0.09e-3  },
+  "Propylene Glycol":    { rho:968.0,   mu:42e-3    },
+  "Turpentine":          { rho:870.0,   mu:1.375e-3 },
+  "Water":               { rho:1000.0,  mu:0.89e-3  },
+};
+
+// type:"poly"  → ρ, μ를 온도 다항식으로 계산 (CoolProp 7.2 기반, 4차 피팅, 끓는점 2K 이하 액체 구간)
+// type:"fixed" → 온도 무관 고정값 (CoolProp 점도 모델 없거나 DB 미수록)
+// rho_poly: ρ = a4·T⁴+a3·T³+a2·T²+a1·T+a0  [kg/m³], T in °C
+// mu_poly : μ = exp(a4·T⁴+...+a0)  [Pa·s], T in °C
+// 정확도: ρ <0.04%, μ <7.5% (전 온도 구간 최대 오차)
+const FLUID_DB = {
+  "Acetone":             { type:"fixed", rho:787.0,   mu:0.316e-3 },
+  "Benzene":             { type:"poly",  T_min:7,   T_max:78,
+    rho_poly:[-0.0,-2.69e-6,-7.574e-5,-1.05621817,900.01172682],
+    mu_poly: [2.5e-9,-7.583e-7,1.136703e-4,-0.0184121542,-7.0149882788] },
+  "Carbon Disulfide":    { type:"fixed", rho:1265.0,  mu:0.36e-3  },
+  "Carbon Tetrachloride":{ type:"fixed", rho:1590.0,  mu:0.91e-3  },
+  "Castor Oil":          { type:"fixed", rho:960.0,   mu:650e-3   },
+  "Chloroform":          { type:"fixed", rho:1470.0,  mu:0.53e-3  },
+  "Decane":              { type:"poly",  T_min:-23, T_max:172,
+    rho_poly:[-0.0,-1.34e-6,1.1542e-4,-0.78031979,745.98184131],
+    mu_poly: [7e-10,-3.638e-7,8.80397e-5,-0.0183898976,-6.6631086489] },
+  "Ether":               { type:"fixed", rho:715.0,   mu:0.223e-3 },
+  "Ethyl Alcohol":       { type:"poly",  T_min:-113, T_max:76,
+    rho_poly:[-0.0,-5.26e-6,-1.6395e-4,-0.84570996,806.47599572],
+    mu_poly: [4.3e-9,-1.917e-7,4.51048e-5,-0.0222245937,-6.2972774294] },
+  "Ethylene Glycol":     { type:"fixed", rho:1100.0,  mu:16.2e-3  },
+  "Glycerine":           { type:"fixed", rho:1263.0,  mu:950e-3   },
+  "Heptane":             { type:"poly",  T_min:-90, T_max:96,
+    rho_poly:[-0.0,-2.74e-6,-1.8864e-4,-0.83046164,700.52748464],
+    mu_poly: [2.8e-9,-4.391e-7,4.29221e-5,-0.0123652065,-7.5551142124] },
+  "Hexane":              { type:"poly",  T_min:-95, T_max:67,
+    rho_poly:[-0.0,-2.85e-6,-5.0925e-4,-0.87895149,677.1925819],
+    mu_poly: [2.5e-9,-2.114e-7,2.54558e-5,-0.0110924063,-7.8545029862] },
+  "Kerosene":            { type:"fixed", rho:823.0,   mu:1.64e-3  },
+  "Linseed Oil":         { type:"fixed", rho:930.0,   mu:33.1e-3  },
+  "Mercury":             { type:"fixed", rho:13600.0, mu:1.53e-3  },
+  "Methyl Alcohol":      { type:"poly",  T_min:-98, T_max:62,
+    rho_poly:[-3e-8,-4.63e-6,1.9962e-4,-0.9375896,809.7265558],
+    mu_poly: [4.8e-9,-2.662e-7,4.49909e-5,-0.0169632829,-7.1188317044] },
+  "Octane":              { type:"poly",  T_min:-57, T_max:124,
+    rho_poly:[-0.0,-1.69e-6,-2.0421e-4,-0.79501976,718.60396484],
+    mu_poly: [1e-9,-3.729e-7,6.91939e-5,-0.0148598647,-7.2447393352] },
+  "Propane":             { type:"fixed", rho:495.0,   mu:0.11e-3  },
+  "Propyl Alcohol":      { type:"fixed", rho:802.0,   mu:1.92e-3  },
+  "Propylene":           { type:"fixed", rho:516.0,   mu:0.09e-3  },
+  "Propylene Glycol":    { type:"fixed", rho:968.0,   mu:42e-3    },
+  "Turpentine":          { type:"fixed", rho:870.0,   mu:1.375e-3 },
+  "Water":               { type:"poly",  T_min:0,   T_max:98,
+    rho_poly:[-1.3e-7,4.061e-5,-7.42612e-3,0.04831455,999.90277923],
+    mu_poly: [6e-9,-1.8961e-6,2.837732e-4,-0.0338841668,-6.3275873789] },
+};
+
+// 온도(°C)로 유체 물성 계산 — CoolProp 우선, 없으면 다항식/고정값
+function polyval(coeffs, x) {
+  return coeffs.reduce((acc, c) => acc * x + c, 0);
+}
+function getFluidProps(name, T_C) {
+  const d = FLUID_DB[name];
+  if (!d) return null;
+
+  // CoolProp JS 사용 가능하면 우선 적용
+  const cp = getCoolPropProps(name, T_C);
+  if (cp) return { rho: cp.rho, mu: cp.mu, temp_applied: true, clamped: false, source: 'CoolProp' };
+
+  // 폴백: 다항식 또는 고정값
+  if (d.type === 'fixed') return { rho: d.rho, mu: d.mu, temp_applied: false, source: 'fixed' };
+  const clamped = T_C < d.T_min || T_C > d.T_max;
+  const T = Math.max(d.T_min, Math.min(d.T_max, T_C));
+  const rho = polyval(d.rho_poly, T);
+  const mu  = Math.exp(polyval(d.mu_poly, T));
+  return { rho, mu, temp_applied: true, clamped, T_min: d.T_min, T_max: d.T_max, source: 'poly' };
+}
+
+const NPS_DB = {
+  '1/8"': { OD:10.29,  s:{"5S (B36.19M)":{t:0.89},"10/10S":{t:1.24},"30":{t:1.45},"40/Std/40S":{t:1.73},"80/XS/80S":{t:2.41}}},
+  '1/4"': { OD:13.72,  s:{"5S (B36.19M)":{t:1.24},"10/10S":{t:1.65},"30":{t:1.85},"40/Std/40S":{t:2.24},"80/XS/80S":{t:3.02}}},
+  '3/8"': { OD:17.15,  s:{"5S (B36.19M)":{t:1.24},"10/10S":{t:1.65},"30":{t:1.85},"40/Std/40S":{t:2.31},"80/XS/80S":{t:3.20}}},
+  '1/2"': { OD:21.34,  s:{"5S (B36.19M)":{t:1.65},"10/10S":{t:2.11},"30":{t:2.41},"40/Std/40S":{t:2.77},"80/XS/80S":{t:3.73},"160":{t:4.78},"XXS":{t:7.47}}},
+  '3/4"': { OD:26.67,  s:{"5S (B36.19M)":{t:1.65},"10/10S":{t:2.11},"30":{t:2.41},"40/Std/40S":{t:2.87},"80/XS/80S":{t:3.91},"160":{t:5.56},"XXS":{t:7.82}}},
+  '1"':   { OD:33.40,  s:{"5S (B36.19M)":{t:1.65},"10/10S":{t:2.77},"30":{t:2.90},"40/Std/40S":{t:3.38},"80/XS/80S":{t:4.55},"160":{t:6.35},"XXS":{t:9.09}}},
+  '1-1/4"':{ OD:42.16, s:{"5S (B36.19M)":{t:1.65},"10/10S":{t:2.77},"30":{t:2.97},"40/Std/40S":{t:3.56},"80/XS/80S":{t:4.85},"160":{t:6.35},"XXS":{t:9.70}}},
+  '1-1/2"':{ OD:48.26, s:{"5S (B36.19M)":{t:1.65},"10/10S":{t:2.77},"30":{t:3.18},"40/Std/40S":{t:3.68},"80/XS/80S":{t:5.08},"160":{t:7.14},"XXS":{t:10.16}}},
+  '2"':   { OD:60.33,  s:{"5S (B36.19M)":{t:1.65},"10/10S":{t:2.77},"30":{t:3.18},"40/Std/40S":{t:3.91},"80/XS/80S":{t:5.54},"160":{t:8.74},"XXS":{t:11.07}}},
+  '2-1/2"':{ OD:73.03, s:{"5S (B36.19M)":{t:2.11},"10/10S":{t:3.05},"30":{t:4.78},"40/Std/40S":{t:5.16},"80/XS/80S":{t:7.01},"120":{t:7.62},"160":{t:9.53},"XXS":{t:14.02}}},
+  '3"':   { OD:88.90,  s:{"5S (B36.19M)":{t:2.11},"10/10S":{t:3.05},"30":{t:4.78},"40/Std/40S":{t:5.49},"80/XS/80S":{t:7.62},"120":{t:8.89},"160":{t:11.13},"XXS":{t:15.24}}},
+  '3-1/2"':{ OD:101.60,s:{"5S (B36.19M)":{t:2.11},"10/10S":{t:3.05},"30":{t:4.78},"40/Std/40S":{t:5.74},"80/XS/80S":{t:8.08},"XXS":{t:16.15}}},
+  '4"':   { OD:114.30, s:{"5S (B36.19M)":{t:2.11},"10/10S":{t:3.05},"30":{t:4.78},"40/Std/40S":{t:6.02},"80/XS/80S":{t:8.56},"120":{t:11.10},"160":{t:13.49},"XXS":{t:17.12}}},
+  '5"':   { OD:141.30, s:{"5S (B36.19M)":{t:2.77},"10/10S":{t:3.40},"40/Std/40S":{t:6.55},"80/XS/80S":{t:9.53},"120":{t:12.70},"160":{t:15.88},"XXS":{t:19.05}}},
+  '6"':   { OD:168.28, s:{"5S (B36.19M)":{t:2.77},"10/10S":{t:3.40},"40/Std/40S":{t:7.11},"80/XS/80S":{t:10.97},"120":{t:14.27},"160":{t:18.26},"XXS":{t:21.95}}},
+  '8"':   { OD:219.08, s:{"5S (B36.19M)":{t:2.77},"10/10S":{t:3.76},"20":{t:6.35},"30":{t:7.04},"40/Std":{t:8.18},"60":{t:10.31},"80/XS":{t:12.70},"100":{t:15.09},"120":{t:17.48},"140/160":{t:20.62},"XXS":{t:22.23}}},
+  '10"':  { OD:273.05, s:{"5S (B36.19M)":{t:3.40},"10/10S":{t:4.19},"20":{t:6.35},"30/Std":{t:9.27},"40":{t:10.16},"60/XS":{t:12.70},"80":{t:15.09},"100":{t:18.26},"120":{t:21.44},"140":{t:25.40},"160":{t:28.58}}},
+  '12"':  { OD:323.85, s:{"5S (B36.19M)":{t:3.96},"10/10S":{t:4.57},"20":{t:6.35},"30":{t:8.38},"Std":{t:9.53},"40":{t:10.31},"XS/60":{t:12.70},"80":{t:17.48},"100":{t:21.44},"120":{t:25.40},"140":{t:28.58},"160":{t:33.32}}},
+  '14"':  { OD:355.60, s:{"5S (B36.19M)":{t:3.96},"10 (B36.10M)":{t:6.35},"10S (B36.19M)":{t:4.78},"20":{t:7.92},"30/Std":{t:9.53},"40/XS/80S":{t:11.13},"60":{t:15.09},"80":{t:19.05},"100":{t:23.83},"120":{t:27.79},"140":{t:31.75},"160":{t:35.71}}},
+  '16"':  { OD:406.40, s:{"5S (B36.19M)":{t:4.19},"10 (B36.10M)":{t:6.35},"10S (B36.19M)":{t:4.78},"20":{t:7.92},"30/Std":{t:9.53},"40/XS/80S":{t:12.70},"60":{t:16.66},"80":{t:21.41},"100":{t:26.19},"120":{t:30.94},"140":{t:36.50},"160":{t:40.49}}},
+  '18"':  { OD:457.20, s:{"5S (B36.19M)":{t:4.19},"10 (B36.10M)":{t:6.35},"10S (B36.19M)":{t:4.78},"20":{t:7.92},"Std/30":{t:11.10},"XS/80S":{t:12.70},"40":{t:14.27},"60":{t:19.05},"80":{t:23.80},"100":{t:29.36},"120":{t:34.93},"140":{t:39.67},"160":{t:45.24}}},
+  '20"':  { OD:508.00, s:{"5S (B36.19M)":{t:4.78},"10 (B36.10M)":{t:6.35},"10S (B36.19M)":{t:5.54},"20/Std":{t:9.53},"30/XS/80S":{t:12.70},"40":{t:15.06},"60":{t:20.62},"80":{t:26.19},"100":{t:32.51},"120":{t:38.10},"140":{t:44.45},"160":{t:49.99}}},
+  '24"':  { OD:609.60, s:{"5S (B36.19M)":{t:5.54},"10/10S":{t:6.35},"20/Std":{t:9.53},"XS/80S":{t:12.70},"30":{t:14.27},"40":{t:17.45},"60":{t:24.59},"80":{t:30.94},"100":{t:38.89},"120":{t:46.02},"140":{t:52.37},"160":{t:59.51}}},
+};
+
+const ROUGHNESS_DB = {
+  "Steel - Commercial":      { eps:0.046,  note:"단일값" },
+  "Steel - Corrugated":      { eps:2.846,  note:"범위 0.9~9.0mm 기하평균" },
+  "Steel - Riveted":         { eps:2.846,  note:"범위 0.9~9.0mm 기하평균" },
+  "Steel - Drawn (seamless)":{ eps:0.0015, note:"단일값" },
+  "Wrought Iron":            { eps:0.046,  note:"단일값" },
+  "Cast Iron - Asphalted":   { eps:0.12,   note:"단일값" },
+  "Cast Iron - Uncoated":    { eps:0.25,   note:"단일값" },
+  "Galvanized Iron":         { eps:0.15,   note:"단일값" },
+  "Concrete":                { eps:1.118,  note:"범위 0.3~3.0mm 기하평균" },
+  "PVC / Drawn Tubing":      { eps:0.0015, note:"Smooth pipe 수준" },
+  "Glass / Brass":           { eps:0.0,    note:"Smooth pipe" },
+};
+
+const FITTING_DB = {
+  "Elbows":{
+    "90° Elbow - Standard (screwed)":{K:1.5,note:"나사, 표준 곡률"},
+    "90° Elbow - Standard (flanged)":{K:0.3,note:"플랜지, 표준 곡률"},
+    "90° Elbow - Long Radius (flanged)":{K:0.2,note:"플랜지, 장반경 R/D=1.5"},
+    "45° Elbow - Standard (screwed)":{K:0.4,note:"나사, 45도"},
+    "45° Elbow - Long Radius (flanged)":{K:0.1,note:"플랜지, 장반경, 45도"},
+    "180° Return Bend (screwed)":{K:2.1,note:"나사, U자형"},
+    "180° Return Bend (flanged)":{K:0.2,note:"플랜지, U자형"},
+  },
+  "Tees":{
+    "Tee - Line Flow (screwed)":{K:0.9,note:"직선 통과, 나사"},
+    "Tee - Line Flow (flanged)":{K:0.2,note:"직선 통과, 플랜지"},
+    "Tee - Branch Flow (screwed)":{K:2.0,note:"분기 방향, 나사"},
+    "Tee - Branch Flow (flanged)":{K:1.0,note:"분기 방향, 플랜지"},
+  },
+  "Valves":{
+    "Gate Valve - Fully Open":{K:0.1,note:"게이트, 완전 개방"},
+    "Gate Valve - 1/4 Closed":{K:0.26,note:"게이트, 25% 닫힘"},
+    "Gate Valve - 1/2 Closed":{K:2.1,note:"게이트, 50% 닫힘"},
+    "Gate Valve - 3/4 Closed":{K:17.0,note:"게이트, 75% 닫힘"},
+    "Globe Valve - Fully Open (screwed)":{K:10.0,note:"글로브, 나사"},
+    "Globe Valve - Fully Open (flanged)":{K:6.9,note:"글로브, 플랜지"},
+    "Ball Valve - Fully Open":{K:0.05,note:"볼 밸브, 완전 개방"},
+    "Butterfly Valve - Fully Open":{K:0.6,note:"버터플라이, 완전 개방"},
+    "Check Valve - Swing":{K:2.0,note:"스윙 체크 밸브"},
+    "Check Valve - Ball":{K:70.0,note:"볼 체크 밸브"},
+    "Angle Valve - Fully Open (screwed)":{K:5.0,note:"앵글 밸브"},
+  },
+  "Entrances & Exits":{
+    "Pipe Entrance - Sharp-edged":{K:0.5,note:"날카로운 입구"},
+    "Pipe Entrance - Reentrant":{K:0.8,note:"재진입형"},
+    "Pipe Entrance - Well-rounded":{K:0.04,note:"잘 둥글린 입구"},
+    "Pipe Exit - Sharp (into tank)":{K:1.0,note:"탱크로 배출"},
+  },
+  "Expansions & Contractions":{
+    "Sudden Expansion":{K:1.0,note:"급확대 (보수적)"},
+    "Sudden Contraction":{K:0.5,note:"급축소 (보수적)"},
+    "Gradual Expansion 7°":{K:0.07,note:"완만한 확대 반각 7°"},
+    "Gradual Expansion 15°":{K:0.20,note:"완만한 확대 반각 15°"},
+    "Gradual Contraction 45°":{K:0.07,note:"완만한 축소 반각 45°"},
+  },
+  "Miscellaneous":{
+    "Union (screwed)":{K:0.08,note:"유니온, 나사"},
+    "Coupling (screwed)":{K:0.08,note:"커플링, 나사"},
+    "Pipe Bend R/D=1":{K:0.35,note:"파이프 벤드"},
+    "Pipe Bend R/D=2":{K:0.19,note:"파이프 벤드"},
+    "Pipe Bend R/D=4":{K:0.16,note:"파이프 벤드"},
+    "Strainer / Filter (clean)":{K:2.0,note:"스트레이너, 청결 상태"},
+    "Flow Meter - Orifice":{K:3.0,note:"오리피스 유량계 β=0.5"},
+  },
+};
+
+const FLOW_UNITS     = {"m³/s":1,"m³/min":1/60,"m³/h":1/3600,"L/s":1e-3,"L/min":1e-3/60,"L/h":1e-3/3600,"mL/s":1e-6,"ft³/s":2.831684659e-2,"ft³/min":2.831684659e-2/60,"gal/min":3.785411784e-3/60,"gal/h":3.785411784e-3/3600};
+const MDOT_UNITS     = {"kg/s":1,"kg/min":1/60,"kg/h":1/3600,"lb/s":0.453592,"lb/min":0.453592/60,"lb/h":0.453592/3600};
+const LENGTH_UNITS   = {"m":1,"cm":1e-2,"mm":1e-3,"km":1e3,"ft":3.048e-1,"in":2.54e-2,"yd":9.144e-1};
+const DIAM_UNITS     = {"m":1,"cm":1e-2,"mm":1e-3,"in":2.54e-2,"ft":3.048e-1};
+const DENSITY_UNITS  = {"kg/m³":1,"g/cm³":1e3,"g/L":1,"lbm/ft³":1.6018463e1,"slug/ft³":5.15379e2};
+const VISC_UNITS     = {"Pa·s":1,"mPa·s":1e-3,"cP":1e-3,"P":1e-1,"lbm/(ft·s)":1.4881639};
+const PRESS_UNITS    = {"Pa":1,"kPa":1e3,"MPa":1e6,"bar":1e5,"atm":1.01325e5,"psi":6.8947572e3,"mmHg":1.33322e2};
+const ROUGH_UNITS    = {"mm":1e-3,"μm":1e-6,"m":1,"in":2.54e-2};
+
+// ════════════════════════════════════════════════════════════════════════════
+// 계산 함수
+// ════════════════════════════════════════════════════════════════════════════
+function haaland(Re, epsD) {
+  return 1/Math.pow(-1.8*Math.log10(Math.pow(epsD/3.7,1.11)+6.9/Re), 2);
+}
+function colebrook(Re, epsD) {
+  let f = haaland(Re, epsD);
+  const A=epsD/3.7, B=2.51/Re;
+  for (let i=0;i<50;i++) {
+    const sf=Math.sqrt(f), la=A+B/sf;
+    const F=1/sf+2*Math.log10(la);
+    const dF=-1/(2*f**1.5)*(1+2*B/(Math.LN10*la));
+    const fn=f-F/dF;
+    if(fn<=0) break;
+    if(Math.abs(fn-f)<1e-10*f){f=fn;break;}
+    f=fn;
+  }
+  return f;
+}
+function friction(Re, epsD) {
+  if(Re<=2300) return {f:64/Re, regime:"Laminar", method:"f = 64 / Re"};
+  if(Re<=4000) throw new Error(`천이 구간 (Re = ${Re.toFixed(0)}) — 계산 불가`);
+  const f=colebrook(Re,epsD);
+  return {f, regime:"Turbulent", method:epsD===0?"Colebrook-White (smooth)":`Colebrook-White (ε/D=${epsD.toExponential(3)})`};
+}
+function calcDopt(mdot,rho,mu,C1,C2,n,F,eta,a,b,t) {
+  const PI=Math.PI;
+  let f=0.02, D=0.1, iters=0;
+  for(let i=0;i<100;i++){
+    iters++;
+    const Dn=Math.pow(40*f*mdot**3*C2*t/(n*(a+b)*(1+F)*C1*eta*PI*PI*rho*rho),1/(n+5));
+    const V=mdot/(rho*PI*(Dn/2)**2);
+    const Re=rho*V*Dn/mu;
+    const fn=Re<=2300?64/Re:Re<=4000?64/2300:colebrook(Re,0);
+    if(Math.abs(Dn-D)<1e-8&&Math.abs(fn-f)<1e-10){D=Dn;f=fn;break;}
+    D=Dn;f=fn;
+  }
+  const V=mdot/(rho*Math.PI*(D/2)**2);
+  const Re=rho*V*D/mu;
+  return {D,f,Re,regime:Re<=2300?'Laminar':Re<=4000?'Transitional':'Turbulent',iters};
+}
+function findCandidates(D_m, n=6) {
+  const all=[];
+  for(const[nps,data] of Object.entries(NPS_DB))
+    for(const[sched,d] of Object.entries(data.s)){
+      const ID=(data.OD-2*d.t)/1000;
+      all.push({nps,sched,ID_m:ID,ID_mm:+(data.OD-2*d.t).toFixed(2),OD_mm:data.OD,t_mm:d.t,diff:Math.abs(ID-D_m)});
+    }
+  all.sort((a,b)=>a.diff-b.diff);
+  return all.slice(0,n);
+}
+function calcDP(Q,Di,L,rho,mu,eps,dz,Ktotal) {
+  const g=9.80665;
+  const A=Math.PI*(Di/2)**2, V=Q/A, Re=rho*V*Di/mu, epsD=eps/Di;
+  const {f,regime,method}=friction(Re,epsD);
+  const dpMaj=f*(L/Di)*rho*V*V/2;
+  const dpMin=Ktotal*rho*V*V/2;
+  const dpSta=rho*g*dz;
+  const dpTot=dpMaj+dpMin+dpSta;
+  const head=dpTot/(rho*g);
+  return {V,Re,epsD,f,regime,method,dpMaj,dpMin,dpSta,dpTot,head};
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 상태
+// ════════════════════════════════════════════════════════════════════════════
+let mode = 'A';
+let fittings = [];
+let lastDPtotal = null;    // Design Mode
+let lastDPcheck = null;    // Check Mode
+let designState = null;    // D_opt 계산 후 저장
+
+// ════════════════════════════════════════════════════════════════════════════
+// 모드 전환
+// ════════════════════════════════════════════════════════════════════════════
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn_modeA').className = 'mode-btn' + (m==='A'?' active-a':'');
+  document.getElementById('btn_modeB').className = 'mode-btn' + (m==='B'?' active-b':'');
+  document.getElementById('mode_desc').textContent = m==='A'
+    ? '유량·경제 파라미터 → D_opt → NPS 선택 → ΔP → Barlow'
+    : '기존 NPS 입력 → ΔP 계산 → Barlow 판정';
+
+  // 좌측: Check Mode에서만 파이프 카드 표시
+  document.getElementById('card_pipe').classList.toggle('hidden', m==='A');
+  // 경제 파라미터: Design Mode 전용
+  document.getElementById('card_econ').classList.toggle('hidden', m==='B');
+
+  document.getElementById('btn_calc_a').classList.toggle('hidden', m!=='A');
+  document.getElementById('btn_calc_b').classList.toggle('hidden', m!=='B');
+
+  // 결과 초기화
+  showPlaceholder(m==='A'?'입력값을 설정하고 Calculate D_opt를 누르세요':'입력값을 설정하고 Calculate ΔP를 누르세요');
+  document.getElementById('res_design').classList.add('hidden');
+  document.getElementById('res_check').classList.add('hidden');
+  clearErr();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 입력 핸들러
+// ════════════════════════════════════════════════════════════════════════════
+function toggleCard(hdr) {
+  hdr.classList.toggle('closed');
+  hdr.nextElementSibling.classList.toggle('closed');
+}
+function onFluidMode() {
+  const m = document.querySelector('input[name="fluid_mode"]:checked').value;
+  // db_temp 선택했는데 CoolProp 없으면 db_fixed로 강제 복귀
+  if (m === 'db_temp' && !window.COOLPROP_READY) {
+    document.querySelector('input[name="fluid_mode"][value="db_fixed"]').checked = true;
+    onFluidMode(); return;
+  }
+  document.getElementById('fluid_db_fixed').classList.toggle('hidden', m !== 'db_fixed');
+  document.getElementById('fluid_db_temp').classList.toggle('hidden',  m !== 'db_temp');
+  document.getElementById('fluid_manual').classList.toggle('hidden',   m !== 'manual');
+  if (m === 'db_fixed') onFluidChangeFixed();
+  if (m === 'db_temp')  onFluidChangeTemp();
+}
+function getTempC() {
+  const val = parseFloat(document.getElementById('le_temp').value) || 25;
+  const unit = document.getElementById('cb_temp_unit').value;
+  if (unit === 'K') return val - 273.15;
+  if (unit === 'F') return (val - 32) * 5/9;
+  return val;
+}
+
+function onFluidChangeFixed() {
+  const name = document.getElementById('cb_fluid_fixed').value;
+  const d = FLUID_DB_FIXED[name];
+  if (!d) return;
+  document.getElementById('lbl_rho_fixed').textContent = d.rho.toFixed(2) + ' kg/m³';
+  document.getElementById('lbl_mu_fixed').textContent  = d.mu.toExponential(3) + ' Pa·s';
+}
+
+function onFluidChangeTemp() {
+  const name = document.getElementById('cb_fluid_temp').value;
+  const T_C  = getTempC();
+  const props = getFluidProps(name, T_C);
+  if (!props) return;
+  document.getElementById('lbl_rho_temp').textContent = props.rho.toFixed(2) + ' kg/m³';
+  document.getElementById('lbl_mu_temp').textContent  = props.mu.toExponential(3) + ' Pa·s';
+  const warnEl = document.getElementById('lbl_temp_warn');
+  const d = FLUID_DB[name];
+  if (props.source === 'CoolProp') {
+    warnEl.style.display = 'none';
+  } else if (!d || d.type === 'fixed') {
+    warnEl.style.display = 'block';
+    warnEl.textContent = `ℹ ${name}: CoolProp 점도 모델 없음 — 다항식/고정값 사용`;
+  } else if (props.clamped) {
+    warnEl.style.display = 'block';
+    warnEl.textContent = `⚠ 유효 범위 ${d.T_min}~${d.T_max}°C — 경계값으로 계산`;
+  } else {
+    warnEl.style.display = 'none';
+  }
+}
+
+function onFluidChange() {
+  const m = document.querySelector('input[name="fluid_mode"]:checked').value;
+  if (m === 'db_fixed') onFluidChangeFixed();
+  if (m === 'db_temp')  onFluidChangeTemp();
+}
+function onPipeMode() {
+  const m=document.querySelector('input[name="pipe_mode"]:checked').value;
+  document.getElementById('pipe_nps').classList.toggle('hidden',m!=='nps');
+  document.getElementById('pipe_manual').classList.toggle('hidden',m!=='manual');
+}
+function onNpsChange() {
+  const nps=document.getElementById('cb_nps').value;
+  populateSel('cb_sched',Object.keys(NPS_DB[nps].s));
+  onSchedChange();
+}
+function onSchedChange() {
+  const nps=document.getElementById('cb_nps').value,sched=document.getElementById('cb_sched').value;
+  const d=NPS_DB[nps],t=d.s[sched].t,ID=+(d.OD-2*t).toFixed(2);
+  document.getElementById('lbl_od').textContent=d.OD.toFixed(2)+' mm';
+  document.getElementById('lbl_id').textContent=ID.toFixed(2)+' mm';
+}
+function onRoughMode() {
+  const m=document.querySelector('input[name="rough_mode"]:checked').value;
+  document.getElementById('rough_db').classList.toggle('hidden',m!=='db');
+  document.getElementById('rough_manual').classList.toggle('hidden',m!=='manual');
+}
+function onRoughChange() {
+  const d=ROUGHNESS_DB[document.getElementById('cb_rough').value];
+  document.getElementById('lbl_rough').textContent=d?`${d.eps} mm  (${d.note})`:'—';
+}
+function onFlowType() {
+  const m=document.querySelector('input[name="flow_type"]:checked').value;
+  document.getElementById('flow_vol').classList.toggle('hidden',m!=='vol');
+  document.getElementById('flow_mass').classList.toggle('hidden',m!=='mass');
+}
+function onMaterialChange() {
+  document.getElementById('custom_s_row').style.display=
+    document.getElementById('material').value==='custom'?'':'none';
+}
+function onCatChange() {
+  const cat=document.getElementById('cb_cat').value;
+  populateSel('cb_fitting',Object.keys(FITTING_DB[cat]||{}));
+  onFittingChange();
+}
+function onFittingChange() {
+  const cat=document.getElementById('cb_cat').value,name=document.getElementById('cb_fitting').value;
+  const d=(FITTING_DB[cat]||{})[name];
+  document.getElementById('lbl_k_hint').textContent=d?`K = ${d.K}`:'K = —';
+  document.getElementById('lbl_note_hint').textContent=d?d.note:'';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Fitting
+// ════════════════════════════════════════════════════════════════════════════
+function addFittingDB() {
+  const cat=document.getElementById('cb_cat').value,name=document.getElementById('cb_fitting').value;
+  const d=(FITTING_DB[cat]||{})[name];
+  if(!d) return alert('K값을 찾을 수 없습니다.');
+  fittings.push({name,K:d.K,qty:parseInt(document.getElementById('sb_qty').value)||1});
+  renderFittings();
+}
+function addFittingK() {
+  const K=parseFloat(document.getElementById('le_k_val').value);
+  if(isNaN(K)||K<0) return alert('올바른 K값을 입력해 주세요.');
+  const name=document.getElementById('le_k_name').value.trim()||`Custom K=${K.toFixed(3)}`;
+  fittings.push({name,K,qty:1});
+  document.getElementById('le_k_val').value='';
+  document.getElementById('le_k_name').value='';
+  renderFittings();
+}
+function deleteFitting(i){fittings.splice(i,1);renderFittings();}
+function clearFittings(){fittings=[];renderFittings();}
+function renderFittings() {
+  const tbody=document.getElementById('fit_tbody');
+  tbody.innerHTML='';
+  let tot=0;
+  fittings.forEach((f,i)=>{
+    const kq=f.K*f.qty; tot+=kq;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${f.name}</td><td>${f.K.toFixed(4)}</td><td>${f.qty}</td><td>${kq.toFixed(4)}</td><td><button class="btn btn-del" onclick="deleteFitting(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('k_total').textContent=`∑K = ${tot.toFixed(4)}`;
+}
+function getKtotal(){return fittings.reduce((s,f)=>s+f.K*f.qty,0);}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 입력값 읽기
+// ════════════════════════════════════════════════════════════════════════════
+function getFluid() {
+  const m = document.querySelector('input[name="fluid_mode"]:checked').value;
+  if (m === 'db_fixed') {
+    const name = document.getElementById('cb_fluid_fixed').value;
+    const d = FLUID_DB_FIXED[name];
+    return { rho: d.rho, mu: d.mu };
+  }
+  if (m === 'db_temp') {
+    const name = document.getElementById('cb_fluid_temp').value;
+    const T_C  = getTempC();
+    const props = getFluidProps(name, T_C);
+    return { rho: props.rho, mu: props.mu };
+  }
+  // manual
+  return { rho: pf('le_rho')*DENSITY_UNITS[v('cb_rho_unit')], mu: pf('le_mu')*VISC_UNITS[v('cb_mu_unit')] };
+}
+function getQ(rho) {
+  const ft=document.querySelector('input[name="flow_type"]:checked').value;
+  if(ft==='vol') return pf('le_Q')*FLOW_UNITS[v('cb_Q_unit')];
+  return pf('le_mdot')*MDOT_UNITS[v('cb_mdot_unit')]/rho;
+}
+function getMdot(rho) {
+  const ft=document.querySelector('input[name="flow_type"]:checked').value;
+  if(ft==='mass') return pf('le_mdot')*MDOT_UNITS[v('cb_mdot_unit')];
+  return pf('le_Q')*FLOW_UNITS[v('cb_Q_unit')]*rho;
+}
+function getCheckPipeID() {
+  const m=document.querySelector('input[name="pipe_mode"]:checked').value;
+  if(m==='nps'){
+    const nps=v('cb_nps'),sched=v('cb_sched'),d=NPS_DB[nps];
+    return +(d.OD-2*d.s[sched].t).toFixed(2)/1000;
+  }
+  return pf('le_di')*DIAM_UNITS[v('cb_di_unit')];
+}
+function getCheckPipeOD_t() {
+  const m=document.querySelector('input[name="pipe_mode"]:checked').value;
+  if(m==='nps'){
+    const nps=v('cb_nps'),sched=v('cb_sched'),d=NPS_DB[nps];
+    return{OD_mm:d.OD,t_mm:d.s[sched].t};
+  }
+  return null;
+}
+function getRoughness() {
+  const m=document.querySelector('input[name="rough_mode"]:checked').value;
+  if(m==='smooth') return 0;
+  if(m==='db') return ROUGHNESS_DB[v('cb_rough')].eps*1e-3;
+  return pf('le_rough')*ROUGH_UNITS[v('cb_rough_unit')];
+}
+function getEcon() {
+  const C2=pf('c2')/parseFloat(v('c2_unit'));  // $/kWh 기계단위계, 그대로 사용
+  return{C2,C1:pf('c1'),n:pf('econ_n'),F:pf('econ_F'),eta:pf('econ_eta'),a:pf('econ_a'),b:pf('econ_b'),t:pf('econ_t')};
+}
+function getS(){
+  return v('material')==='custom'?pf('custom_s'):parseFloat(v('material'));
+}
+
+// helpers
+function pf(id){return parseFloat(document.getElementById(id).value);}
+function v(id){return document.getElementById(id).value;}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Design Mode 계산
+// ════════════════════════════════════════════════════════════════════════════
+function calcDesign() {
+  clearErr();
+  try {
+    const {rho,mu}=getFluid();
+    if(!rho||!mu||rho<=0||mu<=0) throw new Error('유체 밀도/점도를 올바르게 입력해 주세요.');
+    const Q=getQ(rho), mdot=getMdot(rho);
+    const L=pf('le_L')*LENGTH_UNITS[v('cb_L_unit')];
+    const dz=pf('le_dz')*LENGTH_UNITS[v('cb_dz_unit')];
+    if(isNaN(Q)||Q<=0) throw new Error('유량을 올바르게 입력해 주세요.');
+    if(isNaN(L)||L<=0) throw new Error('파이프 길이를 올바르게 입력해 주세요.');
+
+    const ep=getEcon();
+    if([ep.C2,ep.C1,ep.n,ep.F,ep.eta,ep.a,ep.b,ep.t].some(v=>isNaN(v)||v<=0))
+      throw new Error('경제 파라미터를 올바르게 입력해 주세요.');
+
+    const {D,f,Re,regime,iters}=calcDopt(mdot,rho,mu,ep.C1,ep.C2,ep.n,ep.F,ep.eta,ep.a,ep.b,ep.t);
+    designState={rho,mu,Q,mdot,L,dz,D,f,Re,regime,iters};
+
+    // D_opt 표시
+    document.getElementById('r_dopt').textContent=D.toFixed(5);
+    document.getElementById('r_dopt_mm').textContent=`(${(D*1000).toFixed(2)} mm)`;
+    document.getElementById('r_iters').textContent=iters;
+    document.getElementById('r_f_opt').textContent=f.toFixed(6);
+    document.getElementById('r_re_opt').textContent=Re.toLocaleString('en',{maximumFractionDigits:1});
+    const regEl=document.getElementById('r_reg_opt');
+    regEl.textContent=regime;
+    regEl.className=regime==='Laminar'?'regime-l':regime==='Turbulent'?'regime-t':'regime-tr';
+
+    // NPS 후보
+    const S_MPa=getS();
+    const candidates=findCandidates(D,6);
+    const tbody=document.getElementById('nps_tbody');
+    tbody.innerHTML='';
+    candidates.forEach((c,i)=>{
+      const Pmax=(2*S_MPa*c.t_mm)/c.OD_mm;
+      const isClosest=i===0;
+      const isLarger=c.ID_m>=D;
+      const tr=document.createElement('tr');
+      tr.style.cssText=isClosest?'border:2px solid #7c3aed;background:rgba(124,58,237,.08);cursor:pointer':'border-bottom:1px solid var(--border);cursor:pointer';
+      tr.onmouseover=()=>{tr.style.background='var(--bg3)';};
+      tr.onmouseout=()=>{tr.style.background=isClosest?'rgba(124,58,237,.08)':'';};
+      tr.onclick=()=>onSelectNps(c,S_MPa);
+      tr.innerHTML=`
+        <td style="padding:5px 7px;color:var(--text);font-weight:${isClosest?'600':'400'}">${c.nps}</td>
+        <td style="padding:5px 7px;color:var(--text2)">${c.sched}</td>
+        <td style="padding:5px 7px;text-align:right;font-family:var(--mono);color:var(--text2)">${c.ID_mm.toFixed(2)}</td>
+        <td style="padding:5px 7px;text-align:right;font-family:var(--mono);color:var(--text2)">${c.OD_mm.toFixed(2)}</td>
+        <td style="padding:5px 7px;text-align:right;font-family:var(--mono);color:var(--text2)">${c.t_mm.toFixed(2)}</td>
+        <td style="padding:5px 7px;text-align:center;font-size:11px;color:${isClosest?'#bc8cff':isLarger?'var(--green)':'var(--text3)'}">${isClosest?'★ 최적':isLarger?'여유':'부족'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('res_after_nps').classList.add('hidden');
+    hidePlaceholder();
+    document.getElementById('res_design').classList.remove('hidden');
+    document.getElementById('res_check').classList.add('hidden');
+
+  } catch(e) { showErr(e.message); }
+}
+
+function onSelectNps(c, S_MPa) {
+  if(!designState) return;
+  const {rho,mu,Q,mdot,L,dz}=designState;
+  const Ktotal=getKtotal();
+  const eps=0; // Design Mode: smooth pipe (D_opt는 smooth로 수렴)
+
+  try {
+    const r=calcDP(Q,c.ID_m,L,rho,mu,eps,dz,Ktotal);
+
+    // 선택 NPS 표시
+    document.getElementById('r_selected_nps').textContent=`${c.nps}  ${c.sched}`;
+    document.getElementById('r_selected_id').textContent=c.ID_mm.toFixed(2);
+
+    // Flow
+    document.getElementById('r_V').textContent=r.V.toFixed(4);
+    document.getElementById('r_Re').textContent=r.Re.toLocaleString('en',{maximumFractionDigits:1});
+    const rEl=document.getElementById('r_regime');
+    rEl.textContent=r.regime;
+    rEl.className='rv '+(r.regime==='Laminar'?'regime-l':'regime-t');
+    document.getElementById('r_f').textContent=r.f.toFixed(6);
+
+    // Breakdown
+    const sign=dz>=0?'+':'';
+    document.getElementById('r_dp_major').textContent=(r.dpMaj/1e3).toFixed(4)+' kPa';
+    document.getElementById('r_dp_minor').textContent=Ktotal>0?`${(r.dpMin/1e3).toFixed(4)} kPa  (∑K=${Ktotal.toFixed(3)})`:'0.0000 kPa  (fitting 없음)';
+    document.getElementById('r_dp_static').textContent=`${(r.dpSta/1e3).toFixed(4)} kPa  (Δz=${sign}${dz.toFixed(2)} m)`;
+
+    // ΔP Total
+    lastDPtotal=r.dpTot;
+    refreshDP();
+    document.getElementById('r_dp_sub').textContent=
+      `${(r.dpTot/1e3).toFixed(4)} kPa  ·  ${(r.dpTot/1e5).toFixed(5)} bar  ·  ${(r.dpTot/6894.76).toFixed(4)} psi`;
+
+    // Pump
+    let pw=mdot*9.80665*r.head, pu='W';
+    if(pw>=1000){pw/=1000;pu='kW';}
+    document.getElementById('r_head').textContent=r.head.toFixed(4);
+    document.getElementById('r_power').textContent=pw.toFixed(3);
+    document.getElementById('r_pow_unit').textContent=pu;
+
+    // Barlow — P_op = ΔP Total
+    const Pmax=(2*S_MPa*c.t_mm)/c.OD_mm;
+    const Pop_MPa=r.dpTot/1e6;
+    const safe=Pmax>=Pop_MPa;
+    document.getElementById('r_pmax').textContent=Pmax.toFixed(3)+' MPa';
+    document.getElementById('r_pop_used').textContent=Pop_MPa.toFixed(4)+' MPa  (= ΔP Total)';
+    const safeEl=document.getElementById('r_safe');
+    safeEl.textContent=safe?'✅  SAFE  (P_max ≥ P_op)':'❌  UNSAFE — 더 두꺼운 Schedule 선택 필요';
+    safeEl.style.color=safe?'var(--green)':'var(--red)';
+
+    document.getElementById('res_after_nps').classList.remove('hidden');
+    document.getElementById('res_after_nps').scrollIntoView({behavior:'smooth',block:'nearest'});
+
+  } catch(e) { showErr(e.message); }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Check Mode 계산
+// ════════════════════════════════════════════════════════════════════════════
+function calcCheck() {
+  clearErr();
+  try {
+    const {rho,mu}=getFluid();
+    if(!rho||!mu||rho<=0||mu<=0) throw new Error('유체 밀도/점도를 올바르게 입력해 주세요.');
+    const Q=getQ(rho), mdot=getMdot(rho);
+    const Di=getCheckPipeID();
+    const L=pf('le_L')*LENGTH_UNITS[v('cb_L_unit')];
+    const dz=pf('le_dz')*LENGTH_UNITS[v('cb_dz_unit')];
+    const eps=getRoughness();
+    const Ktotal=getKtotal();
+    if(isNaN(Q)||Q<=0) throw new Error('유량을 올바르게 입력해 주세요.');
+    if(isNaN(Di)||Di<=0) throw new Error('파이프 직경을 올바르게 입력해 주세요.');
+    if(isNaN(L)||L<=0) throw new Error('파이프 길이를 올바르게 입력해 주세요.');
+
+    const r=calcDP(Q,Di,L,rho,mu,eps,dz,Ktotal);
+    lastDPcheck=r.dpTot;
+
+    // Flow
+    document.getElementById('c_V').textContent=r.V.toFixed(4);
+    document.getElementById('c_Re').textContent=r.Re.toLocaleString('en',{maximumFractionDigits:1});
+    const rEl=document.getElementById('c_regime');
+    rEl.textContent=r.regime;
+    rEl.className='rv '+(r.regime==='Laminar'?'regime-l':'regime-t');
+    document.getElementById('c_f').textContent=r.f.toFixed(6);
+    document.getElementById('c_epsD').textContent=r.epsD>0?r.epsD.toExponential(4):'0  (Smooth)';
+    document.getElementById('c_method').textContent=r.method;
+
+    // Breakdown
+    const sign=dz>=0?'+':'';
+    document.getElementById('c_dp_major').textContent=(r.dpMaj/1e3).toFixed(4)+' kPa';
+    document.getElementById('c_dp_minor').textContent=Ktotal>0?`${(r.dpMin/1e3).toFixed(4)} kPa  (∑K=${Ktotal.toFixed(3)})`:'0.0000 kPa  (fitting 없음)';
+    document.getElementById('c_dp_static').textContent=`${(r.dpSta/1e3).toFixed(4)} kPa  (Δz=${sign}${dz.toFixed(2)} m)`;
+
+    // ΔP Total
+    refreshDPCheck();
+    document.getElementById('c_dp_sub').textContent=
+      `${(r.dpTot/1e3).toFixed(4)} kPa  ·  ${(r.dpTot/1e5).toFixed(5)} bar  ·  ${(r.dpTot/6894.76).toFixed(4)} psi`;
+
+    // Pump
+    let pw=mdot*9.80665*r.head, pu='W';
+    if(pw>=1000){pw/=1000;pu='kW';}
+    document.getElementById('c_head').textContent=r.head.toFixed(4);
+    document.getElementById('c_power').textContent=pw.toFixed(3);
+    document.getElementById('c_pow_unit').textContent=pu;
+
+    // Barlow — P_op = ΔP Total 자동 적용
+    const S_MPa=getS();
+    const Pop_MPa=r.dpTot/1e6;
+    const pipe=getCheckPipeOD_t();
+    if(pipe){
+      const Pmax=(2*S_MPa*pipe.t_mm)/pipe.OD_mm;
+      const safe=Pmax>=Pop_MPa;
+      document.getElementById('c_pmax').textContent=Pmax.toFixed(3)+' MPa';
+      document.getElementById('c_pop_used').textContent=Pop_MPa.toFixed(4)+' MPa  (= ΔP Total)';
+      const safeEl=document.getElementById('c_safe');
+      safeEl.textContent=safe?'✅  SAFE  (P_max ≥ P_op)':'❌  UNSAFE — 더 두꺼운 Schedule 선택 필요';
+      safeEl.style.color=safe?'var(--green)':'var(--red)';
+    } else {
+      document.getElementById('c_pmax').textContent='—  (Manual 모드: OD/t 정보 없음)';
+      document.getElementById('c_pop_used').textContent=Pop_MPa.toFixed(4)+' MPa';
+      document.getElementById('c_safe').textContent='—';
+    }
+
+    hidePlaceholder();
+    document.getElementById('res_check').classList.remove('hidden');
+    document.getElementById('res_design').classList.add('hidden');
+
+  } catch(e) { showErr(e.message); }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 단위 리프레시
+// ════════════════════════════════════════════════════════════════════════════
+function refreshDP() {
+  if(lastDPtotal===null) return;
+  const unit=v('dp_unit');
+  document.getElementById('r_dp_total').textContent=(lastDPtotal/PRESS_UNITS[unit]).toPrecision(6);
+}
+function refreshDPCheck() {
+  if(lastDPcheck===null) return;
+  const unit=v('c_dp_unit');
+  document.getElementById('c_dp_total').textContent=(lastDPcheck/PRESS_UNITS[unit]).toPrecision(6);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 에러 / placeholder
+// ════════════════════════════════════════════════════════════════════════════
+function showErr(msg){const e=document.getElementById('err_box');e.textContent=msg;e.classList.add('show');}
+function clearErr(){const e=document.getElementById('err_box');e.textContent='';e.classList.remove('show');}
+function showPlaceholder(txt){
+  document.getElementById('placeholder_txt').textContent=txt||'입력값을 설정하고 Calculate를 누르세요';
+  document.getElementById('placeholder').style.display='';
+}
+function hidePlaceholder(){document.getElementById('placeholder').style.display='none';}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Reset
+// ════════════════════════════════════════════════════════════════════════════
+function resetAll() {
+  document.querySelector('input[name="fluid_mode"][value="db_fixed"]').checked=true; onFluidMode();
+  document.querySelector('input[name="pipe_mode"][value="nps"]').checked=true; onPipeMode();
+  document.querySelector('input[name="rough_mode"][value="smooth"]').checked=true; onRoughMode();
+  document.querySelector('input[name="flow_type"][value="vol"]').checked=true; onFlowType();
+  document.getElementById('cb_fluid_fixed').value='Water'; onFluidChangeFixed();
+  document.getElementById('cb_nps').value='4"'; onNpsChange();
+  document.getElementById('le_Q').value='10';
+  document.getElementById('cb_Q_unit').value='L/s';
+  document.getElementById('le_L').value='100';
+  document.getElementById('cb_L_unit').value='m';
+  document.getElementById('le_dz').value='0';
+  fittings=[]; renderFittings();
+  lastDPtotal=null; lastDPcheck=null; designState=null;
+  document.getElementById('res_design').classList.add('hidden');
+  document.getElementById('res_check').classList.add('hidden');
+  showPlaceholder(mode==='A'?'입력값을 설정하고 Calculate D_opt를 누르세요':'입력값을 설정하고 Calculate ΔP를 누르세요');
+  clearErr();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 드래그 분할
+// ════════════════════════════════════════════════════════════════════════════
+(function(){
+  const ws=document.querySelector('.workspace');
+  const pL=document.getElementById('paneLeft');
+  const dV=document.getElementById('divV');
+  const pRT=document.getElementById('paneRT');
+  const pR=document.getElementById('paneRight');
+  const dH=document.getElementById('divH');
+
+  dV.addEventListener('mousedown',e=>{
+    e.preventDefault(); document.body.classList.add('no-select'); dV.classList.add('dragging');
+    const sx=e.clientX, sw=pL.getBoundingClientRect().width, tw=ws.getBoundingClientRect().width;
+    const mm=e2=>{pL.style.width=Math.max(240,Math.min(tw-260-5,sw+(e2.clientX-sx)))+'px';};
+    const mu=()=>{document.body.classList.remove('no-select');dV.classList.remove('dragging');document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+    document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu);
+  });
+
+  dH.addEventListener('mousedown',e=>{
+    e.preventDefault(); document.body.classList.add('no-select'); dH.classList.add('dragging');
+    const sy=e.clientY, sh=pRT.getBoundingClientRect().height, rh=pR.getBoundingClientRect().height;
+    const mm=e2=>{pRT.style.height=Math.max(100,Math.min(rh-100-5,sh+(e2.clientY-sy)))+'px';};
+    const mu=()=>{document.body.classList.remove('no-select');dH.classList.remove('dragging');document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+    document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu);
+  });
+})();
+
+// ════════════════════════════════════════════════════════════════════════════
+// 초기화
+// ════════════════════════════════════════════════════════════════════════════
+function populateSel(id,items){
+  const s=document.getElementById(id); s.innerHTML='';
+  items.forEach(i=>{const o=document.createElement('option');o.value=o.textContent=i;s.appendChild(o);});
+}
+
+(function init(){
+  populateSel('cb_fluid_fixed', Object.keys(FLUID_DB_FIXED));
+  document.getElementById('cb_fluid_fixed').value = 'Water'; onFluidChangeFixed();
+
+  populateSel('cb_fluid_temp', Object.keys(FLUID_DB));
+  document.getElementById('cb_fluid_temp').value = 'Water';
+
+  populateSel('cb_nps',Object.keys(NPS_DB));
+  document.getElementById('cb_nps').value='4"'; onNpsChange();
+
+  populateSel('cb_rough',Object.keys(ROUGHNESS_DB)); onRoughChange();
+
+  populateSel('cb_rho_unit',Object.keys(DENSITY_UNITS));
+  populateSel('cb_mu_unit',Object.keys(VISC_UNITS));
+  populateSel('cb_di_unit',Object.keys(DIAM_UNITS)); document.getElementById('cb_di_unit').value='mm';
+  populateSel('cb_Q_unit',Object.keys(FLOW_UNITS)); document.getElementById('cb_Q_unit').value='L/s';
+  populateSel('cb_mdot_unit',Object.keys(MDOT_UNITS));
+  populateSel('cb_L_unit',Object.keys(LENGTH_UNITS)); document.getElementById('cb_L_unit').value='m';
+  populateSel('cb_dz_unit',Object.keys(LENGTH_UNITS)); document.getElementById('cb_dz_unit').value='m';
+  populateSel('cb_rough_unit',Object.keys(ROUGH_UNITS));
+  populateSel('dp_unit',Object.keys(PRESS_UNITS)); document.getElementById('dp_unit').value='kPa';
+  populateSel('c_dp_unit',Object.keys(PRESS_UNITS)); document.getElementById('c_dp_unit').value='kPa';
+
+  populateSel('cb_cat',Object.keys(FITTING_DB)); onCatChange();
+
+  // Design Mode로 시작
+  setMode('A');
+
+  // CoolProp JS 존재 여부 감지 (비동기)
+  initCoolProp();
+})();
+</script>
+</body>
+</html>
